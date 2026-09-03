@@ -8,6 +8,9 @@
       :root {
         color-scheme: dark;
       }
+      * {
+        box-sizing: border-box;
+      }
       body {
         margin: 0;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -29,6 +32,7 @@
       .controls {
         display: flex;
         gap: 0.5rem;
+        flex-wrap: wrap;
       }
       input,
       button,
@@ -41,16 +45,36 @@
         font-size: 0.95rem;
       }
       input {
-        flex: 1;
+        flex: 1 1 18rem;
       }
       button {
         cursor: pointer;
         white-space: nowrap;
       }
-      #status {
+      button:disabled,
+      input:disabled,
+      select:disabled {
+        cursor: not-allowed;
+        opacity: 0.65;
+      }
+      .status {
         min-height: 1.25rem;
-        color: #93c5fd;
         font-size: 0.9rem;
+      }
+      .status--info {
+        color: #93c5fd;
+      }
+      .status--warning {
+        color: #fcd34d;
+      }
+      .status--error {
+        color: #fca5a5;
+      }
+      .hint {
+        margin: 0;
+        color: #9ca3af;
+        font-size: 0.9rem;
+        line-height: 1.5;
       }
       video {
         width: 100%;
@@ -69,106 +93,15 @@
           <button id="playBtn" type="button">播放</button>
         </div>
         <select id="filePicker" hidden></select>
-        <div id="status"></div>
+        <div id="status" class="status status--info" role="status" aria-live="polite"></div>
+        <p class="hint">
+          浏览器端播放依赖 WebTorrent 的 WebRTC 通道。若当前种子没有 WebRTC peers / trackers，页面会提示继续等待或建议改用桌面 BT 客户端获取直链后播放。
+        </p>
       </section>
       <video id="player" controls playsinline></video>
     </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/webtorrent@latest/webtorrent.min.js"></script>
-    <script>
-      const player = document.getElementById("player");
-      const magnetInput = document.getElementById("magnet");
-      const playBtn = document.getElementById("playBtn");
-      const filePicker = document.getElementById("filePicker");
-      const statusEl = document.getElementById("status");
-
-      if (!WebTorrent.WEBRTC_SUPPORT) {
-        statusEl.textContent = "当前浏览器不支持 WebRTC，无法在线播放 BT 视频。";
-      }
-
-      const client = new WebTorrent();
-      let currentTorrent = null;
-      let videoFiles = [];
-
-      const setStatus = (text) => {
-        statusEl.textContent = text;
-      };
-
-      const resetPicker = () => {
-        filePicker.hidden = true;
-        filePicker.innerHTML = "";
-      };
-
-      const renderFile = (file) => {
-        setStatus(`正在播放：${file.name}`);
-        player.innerHTML = "";
-        file.renderTo(player, { autoplay: true }, (err) => {
-          if (err) {
-            setStatus(`播放失败：${err.message}`);
-          }
-        });
-      };
-
-      const cleanup = () => {
-        resetPicker();
-        videoFiles = [];
-        if (!currentTorrent) {
-          return;
-        }
-        currentTorrent.destroy();
-        currentTorrent = null;
-      };
-
-      filePicker.addEventListener("change", (event) => {
-        const index = Number(event.target.value);
-        if (videoFiles[index]) {
-          renderFile(videoFiles[index]);
-        }
-      });
-
-      playBtn.addEventListener("click", () => {
-        const magnet = magnetInput.value.trim();
-        if (!magnet.startsWith("magnet:?")) {
-          setStatus("请输入有效的磁力链接。");
-          return;
-        }
-
-        cleanup();
-        setStatus("正在连接节点并获取种子信息...");
-
-        client.add(magnet, (torrent) => {
-          currentTorrent = torrent;
-          videoFiles = torrent.files.filter((file) =>
-            /\.(mp4|mkv|webm|mov|m4v|avi)$/i.test(file.name)
-          );
-
-          if (!videoFiles.length) {
-            setStatus("未找到可播放的视频文件。");
-            return;
-          }
-
-          if (videoFiles.length > 1) {
-            videoFiles.forEach((file, index) => {
-              const option = document.createElement("option");
-              option.value = String(index);
-              option.textContent = file.name;
-              filePicker.appendChild(option);
-            });
-            filePicker.hidden = false;
-          }
-
-          renderFile(videoFiles[0]);
-        });
-      });
-
-      client.on("error", (err) => {
-        setStatus(`加载失败：${err.message}`);
-      });
-
-      window.addEventListener("beforeunload", () => {
-        cleanup();
-        client.destroy();
-      });
-    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/webtorrent@latest/webtorrent.min.js"></script>
+    <script defer src="./app.js"></script>
   </body>
 </html>
