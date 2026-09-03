@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vedio Online</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #111827;
+        color: #e5e7eb;
+      }
+      .app {
+        max-width: 900px;
+        margin: 2rem auto;
+        padding: 1rem;
+      }
+      .panel {
+        display: grid;
+        gap: 0.75rem;
+        background: #1f2937;
+        padding: 1rem;
+        border-radius: 12px;
+      }
+      .controls {
+        display: flex;
+        gap: 0.5rem;
+      }
+      input,
+      button,
+      select {
+        border: 1px solid #374151;
+        background: #111827;
+        color: #e5e7eb;
+        border-radius: 8px;
+        padding: 0.6rem 0.8rem;
+        font-size: 0.95rem;
+      }
+      input {
+        flex: 1;
+      }
+      button {
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      #status {
+        min-height: 1.25rem;
+        color: #93c5fd;
+        font-size: 0.9rem;
+      }
+      video {
+        width: 100%;
+        margin-top: 1rem;
+        border-radius: 12px;
+        background: black;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <section class="panel">
+        <h1>轻量磁力在线播放器</h1>
+        <div class="controls">
+          <input id="magnet" type="text" placeholder="输入磁力链接（magnet:?xt=urn:btih:...）" />
+          <button id="playBtn" type="button">播放</button>
+        </div>
+        <select id="filePicker" hidden></select>
+        <div id="status"></div>
+      </section>
+      <video id="player" controls playsinline></video>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/webtorrent@latest/webtorrent.min.js"></script>
+    <script>
+      const player = document.getElementById("player");
+      const magnetInput = document.getElementById("magnet");
+      const playBtn = document.getElementById("playBtn");
+      const filePicker = document.getElementById("filePicker");
+      const statusEl = document.getElementById("status");
+
+      if (!WebTorrent.WEBRTC_SUPPORT) {
+        statusEl.textContent = "当前浏览器不支持 WebRTC，无法在线播放 BT 视频。";
+      }
+
+      const client = new WebTorrent();
+      let currentTorrent = null;
+      let videoFiles = [];
+
+      const setStatus = (text) => {
+        statusEl.textContent = text;
+      };
+
+      const resetPicker = () => {
+        filePicker.hidden = true;
+        filePicker.innerHTML = "";
+      };
+
+      const renderFile = (file) => {
+        setStatus(`正在播放：${file.name}`);
+        player.innerHTML = "";
+        file.renderTo(player, { autoplay: true }, (err) => {
+          if (err) {
+            setStatus(`播放失败：${err.message}`);
+          }
+        });
+      };
+
+      const cleanup = () => {
+        resetPicker();
+        videoFiles = [];
+        if (!currentTorrent) {
+          return;
+        }
+        currentTorrent.destroy();
+        currentTorrent = null;
+      };
+
+      filePicker.addEventListener("change", (event) => {
+        const index = Number(event.target.value);
+        if (videoFiles[index]) {
+          renderFile(videoFiles[index]);
+        }
+      });
+
+      playBtn.addEventListener("click", () => {
+        const magnet = magnetInput.value.trim();
+        if (!magnet.startsWith("magnet:?")) {
+          setStatus("请输入有效的磁力链接。");
+          return;
+        }
+
+        cleanup();
+        setStatus("正在连接节点并获取种子信息...");
+
+        client.add(magnet, (torrent) => {
+          currentTorrent = torrent;
+          videoFiles = torrent.files.filter((file) =>
+            /\.(mp4|mkv|webm|mov|m4v|avi)$/i.test(file.name)
+          );
+
+          if (!videoFiles.length) {
+            setStatus("未找到可播放的视频文件。");
+            return;
+          }
+
+          if (videoFiles.length > 1) {
+            videoFiles.forEach((file, index) => {
+              const option = document.createElement("option");
+              option.value = String(index);
+              option.textContent = file.name;
+              filePicker.appendChild(option);
+            });
+            filePicker.hidden = false;
+          }
+
+          renderFile(videoFiles[0]);
+        });
+      });
+
+      client.on("error", (err) => {
+        setStatus(`加载失败：${err.message}`);
+      });
+
+      window.addEventListener("beforeunload", () => {
+        cleanup();
+        client.destroy();
+      });
+    </script>
+  </body>
+</html>
